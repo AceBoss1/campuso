@@ -1,3 +1,8 @@
+// NOT deployed for the MVP — Spark plan can't deploy Cloud Functions at all.
+// Kept here for when you upgrade to Blaze and want server-side transactions
+// and instant push instead of the client-side rules + cron workaround
+// described in README.md. See that file for what replaces this for now.
+
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");

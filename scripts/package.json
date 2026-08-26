@@ -1,0 +1,11 @@
+{
+  "name": "nauzi-push-cron",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "send-push": "node send-push-notifications.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  }
+}

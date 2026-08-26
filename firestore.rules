@@ -23,11 +23,15 @@ service cloud.firestore {
       allow create: if isOwner(uid);
     }
 
-    // Username reservation collection — written only via the claimUsername
-    // Cloud Function (Admin SDK bypasses rules), so lock out direct client writes.
+    // Username reservation collection. Firestore evaluates a write as "create"
+    // only when no document currently exists at that path — if two clients race
+    // to claim the same username, the server serializes them and only the first
+    // is seen as a create; the second is an update and gets rejected below.
+    // That makes this race-safe without a transaction or Cloud Function.
     match /usernames/{username} {
       allow read: if isSignedIn();
-      allow write: if false;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /posts/{postId} {
