@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    function isNotBanned() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned != true;
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow update: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+    }
+
+    // Username reservation collection — written only via the claimUsername
+    // Cloud Function (Admin SDK bypasses rules), so lock out direct client writes.
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isNotBanned() &&
+        request.resource.data.authorId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isOwner(resource.data.authorId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'imageUrls']));
+      allow delete: if isOwner(resource.data.authorId) || isAdmin();
+
+      match /likes/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid);
+      }
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isNotBanned() &&
+          request.resource.data.authorId == request.auth.uid;
+        allow delete: if isOwner(resource.data.authorId) || isAdmin();
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && isNotBanned() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reportedBy == request.auth.uid;
+      allow read, update: if isAdmin();
+    }
+
+    match /notifications/{uid}/items/{notifId} {
+      allow read, update: if isOwner(uid);
+      allow create: if isSignedIn();
+    }
+  }
+}
