@@ -2,51 +2,52 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-    function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    function isNotBanned() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned != true;
+    function isAdmin() { return isSignedIn() && me().isAdmin == true; }
+    function isNotBanned() { return isSignedIn() && me().isBanned != true; }
+    function mySchool() { return me().schoolId; }
+
+    // ---------- Schools ----------
+    match /schools/{schoolId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
+    // ---------- Users ----------
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow update: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      // isVerified / isAdmin / isBanned / verifiedBadgeType can only be
+      // changed by admin, never by the user's own update.
+      allow update: if isOwner(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['isVerified','isAdmin','isBanned','verifiedBadgeType']);
     }
 
-    // Username reservation collection. Firestore evaluates a write as "create"
-    // only when no document currently exists at that path — if two clients race
-    // to claim the same username, the server serializes them and only the first
-    // is seen as a create; the second is an update and gets rejected below.
-    // That makes this race-safe without a transaction or Cloud Function.
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
-    match /posts/{postId} {
+    // ---------- Posts (per-school subcollection) ----------
+    match /schools/{schoolId}/posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isNotBanned() &&
-        request.resource.data.authorId == request.auth.uid;
+        request.resource.data.authorId == request.auth.uid &&
+        mySchool() == schoolId;
       allow update: if isAdmin() ||
         (isOwner(resource.data.authorId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'imageUrls']));
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['text','imageUrls']));
       allow delete: if isOwner(resource.data.authorId) || isAdmin();
 
-      match /likes/{uid} {
-        allow read: if isSignedIn();
-        allow write: if isOwner(uid);
-      }
+      match /likes/{uid} { allow read: if isSignedIn(); allow write: if isOwner(uid); }
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && isNotBanned() &&
@@ -55,10 +56,51 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Confessions (text-only V1, pseudo-anonymous) ----------
+    // Public doc has NO uid on it — only an anonId. Author lookup lives in a
+    // separate admin-only collection so peers can never see who posted, but
+    // admin can trace abuse (illegal content, harassment, doxxing) for bans
+    // and legal compliance. This is a default choice — see docs/open-decisions.md.
+    match /schools/{schoolId}/confessions/{confessionId} {
+      allow read: if isSignedIn() &&
+        (resource.data.status == 'approved' || isAdmin());
+      allow create: if isSignedIn() && isNotBanned() && mySchool() == schoolId &&
+        request.resource.data.status == 'pending' &&
+        !('authorId' in request.resource.data); // never allow a uid field here
+      allow update: if isAdmin() ||
+        // reaction increments only, by any signed-in user, on an approved confession
+        (isSignedIn() && resource.data.status == 'approved' &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['reactions']));
+      allow delete: if isAdmin();
+    }
+    // Admin-only author map — never exposed to any student-facing query.
+    match /schools/{schoolId}/confessionAuthors/{confessionId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isNotBanned() &&
+        request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ---------- Whistleblowing ----------
+    // Submitter's uid IS stored (needed for status lookups + abuse handling)
+    // but the Admin UI must never surface name/username next to a ticket —
+    // that UI-level convention is what delivers "anonymous" here, not rule-level
+    // hiding. See docs/open-decisions.md for the true-anonymity alternative.
+    match /schools/{schoolId}/whistleblows/{ticketId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.submittedByUid == request.auth.uid);
+      allow create: if isSignedIn() && isNotBanned() && mySchool() == schoolId &&
+        request.resource.data.submittedByUid == request.auth.uid &&
+        request.resource.data.status == 'submitted';
+      allow update: if isAdmin(); // only admin changes status
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Chats / DMs ----------
     match /chats/{chatId} {
       allow read, write: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
-
       match /messages/{messageId} {
         allow read: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
@@ -68,14 +110,33 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Reports / Notifications ----------
     match /reports/{reportId} {
       allow create: if isSignedIn() && request.resource.data.reportedBy == request.auth.uid;
       allow read, update: if isAdmin();
     }
-
     match /notifications/{uid}/items/{notifId} {
       allow read, update: if isOwner(uid);
       allow create: if isSignedIn();
+    }
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- Revenue: boosted posts, badges, payments ----------
+    // Payment status is set ONLY by the Paystack webhook worker, which writes
+    // via a service account (bypasses these client rules entirely). No client
+    // write path exists for `status` — this prevents a user faking "paid".
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if false; // webhook worker uses admin SDK, ignores rules
+    }
+    match /schools/{schoolId}/posts/{postId}/boost {
+      allow read: if isSignedIn();
+      allow write: if false; // set by webhook worker only
     }
   }
 }

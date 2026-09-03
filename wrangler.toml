@@ -1,0 +1,15 @@
+name = "campuso-upload-broker"
+main = "index.js"
+compatibility_date = "2026-08-01"
+
+# Set these as plain vars (not secret) — none of them are sensitive on their own:
+[vars]
+R2_ACCOUNT_ID = "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID"
+R2_BUCKET = "campuso-media"
+R2_PUBLIC_BASE_URL = "https://media.campuso.app"   # or your r2.dev dev URL
+
+# Secrets (never commit these — set via `wrangler secret put NAME`):
+#   R2_ACCESS_KEY_ID
+#   R2_SECRET_ACCESS_KEY
+
+# package.json in this folder needs: { "dependencies": { "aws4fetch": "^1.0.20" } }

@@ -1,0 +1,13 @@
+{
+  "name": "campuso-upload-broker",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}

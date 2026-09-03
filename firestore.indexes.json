@@ -1,37 +1,40 @@
 {
   "indexes": [
-    {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION",
+    { "collectionGroup": "posts", "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "isHidden", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "posts",
-      "queryScope": "COLLECTION",
+      ] },
+    { "collectionGroup": "posts", "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "authorId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "chats",
-      "queryScope": "COLLECTION",
+      ] },
+    { "collectionGroup": "confessions", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ] },
+    { "collectionGroup": "confessions", "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ] },
+    { "collectionGroup": "whistleblows", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ] },
+    { "collectionGroup": "chats", "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
         { "fieldPath": "lastMessageAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "items",
-      "queryScope": "COLLECTION_GROUP",
+      ] },
+    { "collectionGroup": "items", "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "pushSent", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
-      ]
-    }
+      ] }
   ],
   "fieldOverrides": []
 }
