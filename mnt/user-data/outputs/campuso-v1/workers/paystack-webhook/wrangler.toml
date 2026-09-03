@@ -1,0 +1,7 @@
+name = "campuso-paystack-webhook"
+main = "index.js"
+compatibility_date = "2026-08-01"
+
+# Secrets only (nothing safe to put in plain vars here):
+#   wrangler secret put PAYSTACK_SECRET_KEY
+#   wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON
